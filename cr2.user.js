@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CR2 — Crunchyroll Reskin
 // @namespace    https://github.com/William-Avery/cr2
-// @version      0.6.0
+// @version      0.7.0
 // @description  Personal UI reskin for crunchyroll.com — loads the CR2 prototype bundle.
 // @author       William Avery
 // @match        https://www.crunchyroll.com/*
@@ -41,23 +41,30 @@
         .then(r => { if (!r.ok) throw new Error('Bundle HTTP ' + r.status); return r.text(); })
         .then(html => {
           console.log('[CR2] bundle loaded, length', html.length);
-          // Tag the bundle's <script> tags before writing so we can pick them
-          // out of the live DOM afterward. CR's leftover MutationObservers will
-          // inject their own scripts moments later, and re-executing those
-          // (top-level const/let already declared) throws.
+          // Fingerprint bundle inline scripts by textContent via DOMParser
+          // (inert doc, scripts don't execute). After writing the unmodified
+          // HTML, we identify "ours" in the live DOM by matching textContent —
+          // foreign scripts injected by CR's leftover MutationObservers won't
+          // match, so we won't re-execute them and trigger const collisions.
           const parsed = new DOMParser().parseFromString(html, 'text/html');
-          Array.from(parsed.scripts).forEach((s, i) =>
-            s.setAttribute('data-cr2', String(i)));
-          const taggedHtml = '<!DOCTYPE html>' + parsed.documentElement.outerHTML;
+          const bundleInline = Array.from(parsed.scripts).filter(s => !s.src);
+          const bundleContents = new Set(bundleInline.map(s => s.textContent));
+          console.log('[CR2] bundle inline scripts:', bundleInline.length,
+            'first 80 chars:', bundleInline[0] && bundleInline[0].textContent.slice(0, 80));
           console.log('[CR2] writing bundle to document');
           document.open();
-          document.write(taggedHtml);
+          document.write(html);
           document.close();
           setTimeout(() => {
-            const ours = Array.from(document.querySelectorAll('script[data-cr2]'))
-              .filter(s => !s.src);
+            const liveInline = Array.from(document.scripts).filter(s => !s.src);
+            const ours = liveInline.filter(s => bundleContents.has(s.textContent));
             console.log('[CR2] post-write', document.readyState,
-              'scripts now:', document.scripts.length, 'ours:', ours.length);
+              'scripts now:', document.scripts.length,
+              'live inline:', liveInline.length, 'ours:', ours.length);
+            if (ours.length === 0 && liveInline[0]) {
+              console.log('[CR2] first live inline (first 80 chars):',
+                liveInline[0].textContent.slice(0, 80));
+            }
             // document.write after page load parses <script> tags into the DOM
             // but doesn't execute them. Replace with fresh clones to force exec.
             for (const oldScript of ours) {
