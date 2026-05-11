@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CR2 — Crunchyroll Reskin
 // @namespace    https://github.com/William-Avery/cr2
-// @version      0.3.0
+// @version      0.4.0
 // @description  Personal UI reskin for crunchyroll.com — loads the CR2 prototype bundle.
 // @author       William Avery
 // @match        https://www.crunchyroll.com/*
@@ -47,6 +47,19 @@
           document.close();
           setTimeout(() => {
             console.log('[CR2] post-write', document.readyState, 'scripts:', document.scripts.length);
+            // document.write after page load parses <script> tags into the DOM
+            // but doesn't execute them. Replace inline scripts with fresh clones
+            // to force execution.
+            const inline = Array.from(document.scripts).filter(s => !s.src);
+            console.log('[CR2] re-injecting', inline.length, 'inline scripts');
+            for (const oldScript of inline) {
+              const newScript = document.createElement('script');
+              for (const attr of oldScript.attributes) {
+                newScript.setAttribute(attr.name, attr.value);
+              }
+              newScript.textContent = oldScript.textContent;
+              oldScript.parentNode.replaceChild(newScript, oldScript);
+            }
           }, 0);
         })
         .catch(err => {
