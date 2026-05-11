@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CR2 — Crunchyroll Reskin
 // @namespace    https://github.com/William-Avery/cr2
-// @version      0.7.0
+// @version      0.8.0
 // @description  Personal UI reskin for crunchyroll.com — loads the CR2 prototype bundle.
 // @author       William Avery
 // @match        https://www.crunchyroll.com/*
@@ -41,40 +41,29 @@
         .then(r => { if (!r.ok) throw new Error('Bundle HTTP ' + r.status); return r.text(); })
         .then(html => {
           console.log('[CR2] bundle loaded, length', html.length);
-          // Fingerprint bundle inline scripts by textContent via DOMParser
-          // (inert doc, scripts don't execute). After writing the unmodified
-          // HTML, we identify "ours" in the live DOM by matching textContent —
-          // foreign scripts injected by CR's leftover MutationObservers won't
-          // match, so we won't re-execute them and trigger const collisions.
+          // document.write was being reverted by CR's leftover JS — the live
+          // DOM ended up with CR's content, not the bundle's. Swap the root
+          // element directly instead. DOMParser builds an inert tree (scripts
+          // don't auto-execute), then we adopt it as the live documentElement.
           const parsed = new DOMParser().parseFromString(html, 'text/html');
-          const bundleInline = Array.from(parsed.scripts).filter(s => !s.src);
-          const bundleContents = new Set(bundleInline.map(s => s.textContent));
-          console.log('[CR2] bundle inline scripts:', bundleInline.length,
-            'first 80 chars:', bundleInline[0] && bundleInline[0].textContent.slice(0, 80));
-          console.log('[CR2] writing bundle to document');
-          document.open();
-          document.write(html);
-          document.close();
+          const ourInline = Array.from(parsed.scripts).filter(s => !s.src);
+          console.log('[CR2] bundle inline scripts:', ourInline.length);
+          console.log('[CR2] swapping documentElement');
+          document.documentElement.replaceWith(parsed.documentElement);
           setTimeout(() => {
-            const liveInline = Array.from(document.scripts).filter(s => !s.src);
-            const ours = liveInline.filter(s => bundleContents.has(s.textContent));
-            console.log('[CR2] post-write', document.readyState,
-              'scripts now:', document.scripts.length,
-              'live inline:', liveInline.length, 'ours:', ours.length);
-            if (ours.length === 0 && liveInline[0]) {
-              console.log('[CR2] first live inline (first 80 chars):',
-                liveInline[0].textContent.slice(0, 80));
-            }
-            // document.write after page load parses <script> tags into the DOM
-            // but doesn't execute them. Replace with fresh clones to force exec.
-            for (const oldScript of ours) {
-              if (!oldScript.parentNode) continue;
+            const stillAttached = ourInline.filter(s => s.isConnected);
+            console.log('[CR2] post-swap', document.readyState,
+              'scripts in doc:', document.scripts.length,
+              'ours still attached:', stillAttached.length);
+            // Adopted scripts don't auto-execute. Replace each with a fresh
+            // element (same content) to trigger execution.
+            for (const oldScript of stillAttached) {
               const newScript = document.createElement('script');
               for (const attr of oldScript.attributes) {
                 newScript.setAttribute(attr.name, attr.value);
               }
               newScript.textContent = oldScript.textContent;
-              oldScript.parentNode.replaceChild(newScript, oldScript);
+              oldScript.replaceWith(newScript);
             }
           }, 0);
         })
