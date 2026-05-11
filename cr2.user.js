@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CR2 — Crunchyroll Reskin
 // @namespace    https://github.com/William-Avery/cr2
-// @version      0.5.0
+// @version      0.6.0
 // @description  Personal UI reskin for crunchyroll.com — loads the CR2 prototype bundle.
 // @author       William Avery
 // @match        https://www.crunchyroll.com/*
@@ -41,21 +41,26 @@
         .then(r => { if (!r.ok) throw new Error('Bundle HTTP ' + r.status); return r.text(); })
         .then(html => {
           console.log('[CR2] bundle loaded, length', html.length);
+          // Tag the bundle's <script> tags before writing so we can pick them
+          // out of the live DOM afterward. CR's leftover MutationObservers will
+          // inject their own scripts moments later, and re-executing those
+          // (top-level const/let already declared) throws.
+          const parsed = new DOMParser().parseFromString(html, 'text/html');
+          Array.from(parsed.scripts).forEach((s, i) =>
+            s.setAttribute('data-cr2', String(i)));
+          const taggedHtml = '<!DOCTYPE html>' + parsed.documentElement.outerHTML;
           console.log('[CR2] writing bundle to document');
           document.open();
-          document.write(html);
+          document.write(taggedHtml);
           document.close();
-          // Snapshot bundle scripts synchronously: CR's leftover MutationObservers
-          // (and extensions) will inject their own scripts via microtasks right
-          // after document.write. We must not re-execute those — they've already
-          // run, and re-running their top-level const/let declarations throws.
-          const inline = Array.from(document.scripts).filter(s => !s.src);
           setTimeout(() => {
+            const ours = Array.from(document.querySelectorAll('script[data-cr2]'))
+              .filter(s => !s.src);
             console.log('[CR2] post-write', document.readyState,
-              'scripts now:', document.scripts.length, 'ours:', inline.length);
+              'scripts now:', document.scripts.length, 'ours:', ours.length);
             // document.write after page load parses <script> tags into the DOM
             // but doesn't execute them. Replace with fresh clones to force exec.
-            for (const oldScript of inline) {
+            for (const oldScript of ours) {
               if (!oldScript.parentNode) continue;
               const newScript = document.createElement('script');
               for (const attr of oldScript.attributes) {
