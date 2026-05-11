@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CR2 — Crunchyroll Reskin
 // @namespace    https://github.com/William-Avery/cr2
-// @version      0.2.0
+// @version      0.3.0
 // @description  Personal UI reskin for crunchyroll.com — loads the CR2 prototype bundle.
 // @author       William Avery
 // @match        https://www.crunchyroll.com/*
@@ -45,6 +45,9 @@
           document.open();
           document.write(html);
           document.close();
+          setTimeout(() => {
+            console.log('[CR2] post-write', document.readyState, 'scripts:', document.scripts.length);
+          }, 0);
         })
         .catch(err => {
           console.error('[CR2] fetch failed', err);

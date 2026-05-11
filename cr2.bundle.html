@@ -38,7 +38,9 @@
 
   <script>
     
-document.addEventListener('DOMContentLoaded', async function() {
+console.log('[bundle] script tag executed', document.readyState);
+
+const __bundlerRun = async function() {
   const loading = document.getElementById('__bundler_loading');
   function setStatus(msg) { if (loading) loading.textContent = msg; }
 
@@ -169,7 +171,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     setStatus('Error unpacking: ' + err.message);
     console.error('Bundle unpack error:', err);
   }
-});
+};
+
+if (document.readyState !== 'loading') __bundlerRun();
+else document.addEventListener('DOMContentLoaded', __bundlerRun);
 
   </script>
 
